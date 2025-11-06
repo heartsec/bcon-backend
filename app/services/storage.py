@@ -62,17 +62,33 @@ class ObjectStorageService:
     def download_file(self, object_name: str) -> Optional[bytes]:
         """Download file from RustFS object storage"""
         try:
-            file_stream = io.BytesIO()
-            self.s3_client.download_fileobj(
-                self.bucket_name,
-                object_name,
-                file_stream
+            response = self.s3_client.get_object(
+                Bucket=self.bucket_name,
+                Key=object_name
             )
-            file_stream.seek(0)
-            return file_stream.read()
+            return response['Body'].read()
         except ClientError as e:
             print(f"Error downloading file: {e}")
             return None
+    
+    def file_exists(self, object_name: str) -> bool:
+        """
+        Check if file exists in RustFS object storage
+        
+        Args:
+            object_name: Object key in the bucket
+            
+        Returns:
+            True if file exists, False otherwise
+        """
+        try:
+            self.s3_client.head_object(
+                Bucket=self.bucket_name,
+                Key=object_name
+            )
+            return True
+        except ClientError:
+            return False
     
     def get_file_url(self, object_name: str) -> str:
         """Get the URL for a file in object storage"""

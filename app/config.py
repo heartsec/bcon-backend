@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pydantic import ConfigDict
 
 
 class Settings(BaseSettings):
@@ -15,9 +16,12 @@ class Settings(BaseSettings):
     app_host: str = "0.0.0.0"
     app_port: int = 8000
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    # Cache Configuration
+    cache_dir: str = "cache"  # 本地缓存目录
+    cache_max_size_mb: int = 1024  # 缓存最大容量 (MB)
+    cache_ttl_seconds: int = 3600  # 缓存过期时间 (秒)
+    
+    model_config = ConfigDict(env_file=".env", case_sensitive=False)
 
 
 settings = Settings()
