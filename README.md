@@ -37,26 +37,82 @@ bcon-backend/
 
 - Python 3.8+
 - RustFS server (S3-compatible object storage)
+- **Poppler-utils** (required for PDF processing)
+
+### Installing Poppler on Linux
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install -y poppler-utils
+```
+
+**CentOS/RHEL/Rocky Linux:**
+```bash
+sudo yum install -y poppler-utils
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S poppler
+```
+
+**Alpine Linux (Docker):**
+```bash
+apk add --no-cache poppler-utils
+```
+
+### Verify Installation
+```bash
+pdftoppm -v
+```
 
 ## Setup Instructions
 
-### 1. Create Virtual Environment
+### 1. Install System Dependencies (Linux)
 
+First, install poppler-utils:
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update && sudo apt-get install -y poppler-utils
+```
+
+**CentOS/RHEL:**
+```bash
+sudo yum install -y poppler-utils
+```
+
+### 2. Create Virtual Environment
+
+**Linux/macOS:**
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+**Windows:**
 ```powershell
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 ```
 
-### 2. Install Dependencies
+### 3. Install Dependencies
 
-```powershell
+```bash
 pip install -r requirements.txt
 ```
 
-### 3. Configure Environment Variables
+### 4. Configure Environment Variables
 
 Copy `.env.example` to `.env` and update the values:
 
+**Linux/macOS:**
+```bash
+cp .env.example .env
+```
+
+**Windows:**
 ```powershell
 Copy-Item .env.example .env
 ```
@@ -74,7 +130,7 @@ APP_HOST=0.0.0.0
 APP_PORT=8000
 ```
 
-### 4. Start RustFS (if needed)
+### 5. Start RustFS (if needed)
 
 Refer to RustFS documentation for installation:
 - Linux: https://docs.rustfs.com/zh/installation/linux/
@@ -96,14 +152,56 @@ Access RustFS Console at: http://localhost:9001
 
 ### Development Mode
 
+**Linux/macOS:**
+```bash
+python3 main.py
+```
+
+**Windows:**
 ```powershell
 python main.py
 ```
 
 Or using uvicorn directly:
 
-```powershell
+```bash
 uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Production Mode (Docker)
+
+Build and run using Docker:
+
+```bash
+# Build image
+docker build -t bcon-backend .
+
+# Run container
+docker run -d \
+  --name bcon-backend \
+  -p 8000:8000 \
+  --env-file .env \
+  bcon-backend
+```
+
+Or use Docker Compose (create `docker-compose.yml`):
+
+```yaml
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    restart: unless-stopped
+```
+
+Then run:
+```bash
+docker-compose up -d
 ```
 
 ### Access the API
@@ -134,10 +232,10 @@ Upload a PDF file for processing.
 ```
 
 **Example using curl:**
-```powershell
-curl -X POST "http://localhost:8000/api/pdf/upload" `
-  -H "accept: application/json" `
-  -H "Content-Type: multipart/form-data" `
+```bash
+curl -X POST "http://localhost:8000/api/pdf/upload" \
+  -H "accept: application/json" \
+  -H "Content-Type: multipart/form-data" \
   -F "file=@path/to/your/document.pdf"
 ```
 
@@ -176,11 +274,14 @@ pdf-processing/
 
 - **FastAPI**: Web framework
 - **Uvicorn**: ASGI server
-- **PyMuPDF (fitz)**: PDF processing
+- **pdf2image**: PDF to image conversion (requires poppler-utils)
 - **Pillow**: Image processing
 - **Boto3**: AWS S3 SDK (RustFS compatible)
 - **Pydantic**: Data validation
 - **python-multipart**: File upload support
+
+**System Dependencies:**
+- **poppler-utils**: Required by pdf2image for PDF rendering
 
 ## Development
 

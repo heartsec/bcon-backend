@@ -41,6 +41,13 @@ The FastAPI backend project has been successfully created and migrated to RustFS
 - Added presigned URL generation support
 - Updated all documentation to reference RustFS
 
+### Changes Made for Linux Compatibility:
+- Replaced `PyMuPDF` with `pdf2image` (no compilation issues on Linux)
+- Added `poppler-utils` as system dependency requirement
+- Created `Dockerfile` with poppler-utils pre-installed
+- Updated README with Linux-specific installation instructions
+- Added Docker and Docker Compose deployment options
+
 ### Next Steps:
 1. Create a Python virtual environment: `python -m venv venv`
 2. Activate it: `.\venv\Scripts\Activate.ps1`
