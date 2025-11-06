@@ -6,3 +6,4 @@ Pillow==10.2.0
 boto3==1.34.0
 python-dotenv==1.0.0
 pydantic-settings==2.1.0
+git+https://github.com/langgenius/dify.git@1.9.2#subdirectory=sdks/python-client

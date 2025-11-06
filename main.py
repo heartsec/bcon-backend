@@ -1,7 +1,7 @@
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import pdf
+from app.routers import pdf, dify
 from app.config import settings
 
 # Configure logging
@@ -31,6 +31,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(pdf.router)
+app.include_router(dify.router)
 
 
 @app.get("/")
