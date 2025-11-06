@@ -122,6 +122,22 @@ async def upload_pdf(file: UploadFile = File(...)):
         await file.close()
 
 
+@router.put("/upload", response_model=FileProcessingResponse)
+async def upload_pdf_put(file: UploadFile = File(...)):
+    """
+    Upload a PDF file using PUT method (idempotent operation).
+    Same functionality as POST /upload - creates a new processing ID each time.
+    
+    Args:
+        file: PDF file to upload
+        
+    Returns:
+        FileProcessingResponse with file processing ID and paths
+    """
+    # Reuse the same logic as POST upload
+    return await upload_pdf(file)
+
+
 @router.get("/health")
 async def health_check():
     """Health check endpoint"""
