@@ -20,10 +20,9 @@ class Settings(BaseSettings):
     cache_dir: str = "cache"  # 本地缓存目录
     cache_max_size_mb: int = 1024  # 缓存最大容量 (MB)
     cache_ttl_seconds: int = 3600  # 缓存过期时间 (秒)
-    
+
     model_config = ConfigDict(env_file=".env", case_sensitive=False)
     # Logging Configuration
-    log_level: str = "INFO"  # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
     
 
 
