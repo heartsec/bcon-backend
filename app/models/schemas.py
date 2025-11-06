@@ -6,4 +6,5 @@ class FileProcessingResponse(BaseModel):
     file_processing_id: str
     pdf_path: str
     image_path: str
+    original_filename: str  # 原始文件名
     message: str

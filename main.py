@@ -1,7 +1,17 @@
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import pdf
 from app.config import settings
+
+# Configure logging
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper()),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+logger.debug("Logger initialized with level: %s", settings.log_level)
 
 # Create FastAPI app
 app = FastAPI(
@@ -39,5 +49,6 @@ if __name__ == "__main__":
         "main:app",
         host=settings.app_host,
         port=settings.app_port,
-        reload=True
+        reload=True,
+        log_level=settings.log_level.lower()  # 设置uvicorn日志级别
     )

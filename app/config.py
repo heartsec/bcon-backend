@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 3600  # 缓存过期时间 (秒)
     
     model_config = ConfigDict(env_file=".env", case_sensitive=False)
+    # Logging Configuration
+    log_level: str = "INFO"  # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+    
 
 
 settings = Settings()

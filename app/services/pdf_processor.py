@@ -1,7 +1,6 @@
 import io
-from pdf2image import convert_from_bytes
+import fitz  # PyMuPDF
 from PIL import Image
-from typing import Tuple
 
 
 class PDFProcessingService:
@@ -19,25 +18,29 @@ class PDFProcessingService:
         Returns:
             PNG image data as bytes
         """
-        # Convert first page of PDF to image
-        images = convert_from_bytes(
-            pdf_data,
-            dpi=dpi,
-            first_page=1,
-            last_page=1
-        )
+        # Open PDF from bytes
+        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
         
-        if not images:
-            raise ValueError("Failed to extract first page from PDF")
+        if pdf_document.page_count == 0:
+            pdf_document.close()
+            raise ValueError("PDF document has no pages")
         
-        first_page_image = images[0]
+        # Get first page
+        first_page = pdf_document[0]
         
-        # Convert PIL Image to bytes
-        img_byte_arr = io.BytesIO()
-        first_page_image.save(img_byte_arr, format='PNG')
-        img_byte_arr.seek(0)
+        # Calculate zoom factor from DPI (default is 72 DPI)
+        zoom = dpi / 72
+        mat = fitz.Matrix(zoom, zoom)
         
-        return img_byte_arr.read()
+        # Render page to pixmap
+        pix = first_page.get_pixmap(matrix=mat)
+        
+        # Convert pixmap to PNG bytes
+        png_data = pix.tobytes("png")
+        
+        pdf_document.close()
+        
+        return png_data
     
     @staticmethod
     def validate_pdf(pdf_data: bytes) -> bool:
@@ -55,14 +58,12 @@ class PDFProcessingService:
             if pdf_data[:4] != b'%PDF':
                 return False
             
-            # Try to convert first page to verify it's a valid PDF
-            images = convert_from_bytes(
-                pdf_data,
-                dpi=72,
-                first_page=1,
-                last_page=1
-            )
-            return len(images) > 0
+            # Try to open the PDF to verify it's valid
+            pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
+            page_count = pdf_document.page_count
+            pdf_document.close()
+            
+            return page_count > 0
         except Exception:
             return False
 

@@ -23,8 +23,11 @@ async def upload_pdf(file: UploadFile = File(...)):
     Returns:
         FileProcessingResponse with file processing ID and paths
     """
+    logger.debug(f"Received PDF upload request: filename={file.filename}, content_type={file.content_type}")
+    
     # Validate file type
     if not file.content_type or "pdf" not in file.content_type.lower():
+        logger.warning(f"Invalid file type: {file.content_type}")
         raise HTTPException(
             status_code=400, 
             detail="Only PDF files are allowed"
@@ -33,9 +36,11 @@ async def upload_pdf(file: UploadFile = File(...)):
     try:
         # Read PDF file
         pdf_data = await file.read()
+        logger.debug(f"Read PDF file, size: {len(pdf_data)} bytes")
         
         # Validate PDF
         if not pdf_service.validate_pdf(pdf_data):
+            logger.error("PDF validation failed")
             raise HTTPException(
                 status_code=400,
                 detail="Invalid PDF file"
@@ -43,12 +48,15 @@ async def upload_pdf(file: UploadFile = File(...)):
         
         # Generate unique file processing ID
         file_processing_id = str(uuid.uuid4())
+        logger.debug(f"Generated file processing ID: {file_processing_id}")
         
-        # Define paths in object storage
-        pdf_path = f"{file_processing_id}/{file.filename}"
+        # Define paths in object storage (使用固定名称以便下载)
+        pdf_path = f"{file_processing_id}/original.pdf"
         image_path = f"{file_processing_id}/first_page.png"
+        logger.debug(f"Storage paths - PDF: {pdf_path}, Image: {image_path}")
         
         # Upload PDF to object storage
+        logger.debug("Uploading PDF to storage...")
         pdf_uploaded = storage_service.upload_file(
             file_data=pdf_data,
             object_name=pdf_path,
@@ -56,21 +64,28 @@ async def upload_pdf(file: UploadFile = File(...)):
         )
         
         if not pdf_uploaded:
+            logger.error("Failed to upload PDF to storage")
             raise HTTPException(
                 status_code=500,
                 detail="Failed to upload PDF to storage"
             )
         
+        logger.info(f"PDF uploaded successfully: {pdf_path}")
+        
         # Extract first page as image
+        logger.debug("Extracting first page as image...")
         try:
             image_data = pdf_service.extract_first_page_as_image(pdf_data)
+            logger.debug(f"Image extracted, size: {len(image_data)} bytes")
         except Exception as e:
+            logger.error(f"Failed to extract first page: {str(e)}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Failed to extract first page: {str(e)}"
             )
         
         # Upload image to object storage
+        logger.debug("Uploading image to storage...")
         image_uploaded = storage_service.upload_file(
             file_data=image_data,
             object_name=image_path,
@@ -78,21 +93,27 @@ async def upload_pdf(file: UploadFile = File(...)):
         )
         
         if not image_uploaded:
+            logger.error("Failed to upload image to storage")
             raise HTTPException(
                 status_code=500,
                 detail="Failed to upload image to storage"
             )
         
+        logger.info(f"Image uploaded successfully: {image_path}")
+        logger.info(f"PDF processing completed for ID: {file_processing_id}")
+        
         return FileProcessingResponse(
             file_processing_id=file_processing_id,
             pdf_path=pdf_path,
             image_path=image_path,
+            original_filename=file.filename,  # 保存原始文件名
             message="PDF processed successfully"
         )
         
     except HTTPException:
         raise
     except Exception as e:
+        logger.error(f"Unexpected error during PDF processing: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
             detail=f"An error occurred during processing: {str(e)}"
@@ -108,18 +129,23 @@ async def health_check():
 
 
 @router.get("/files/{processing_id}/pdf")
-async def get_original_pdf(processing_id: str):
+async def get_original_pdf(processing_id: str, filename: str = None):
     """
     下载原始 PDF 文件（带缓存）
     
     Args:
         processing_id: 文件处理 ID
+        filename: 可选的原始文件名（用于下载时的文件名）
         
     Returns:
         PDF 文件流，优先从缓存读取
     """
     try:
         file_path = f"{processing_id}/original.pdf"
+        
+        # 如果没有提供文件名，使用默认文件名
+        download_filename = filename if filename else f"{processing_id}.pdf"
+        logger.debug(f"Download filename: {download_filename}")
         
         # 1. 尝试从缓存获取
         cached_file = cache_service.get(file_path, extension=".pdf")
@@ -128,7 +154,7 @@ async def get_original_pdf(processing_id: str):
             return FileResponse(
                 cached_file,
                 media_type="application/pdf",
-                filename=f"{processing_id}.pdf"
+                filename=download_filename
             )
         
         # 2. 从 RustFS 下载
@@ -145,7 +171,7 @@ async def get_original_pdf(processing_id: str):
         return FileResponse(
             cached_file,
             media_type="application/pdf",
-            filename=f"{processing_id}.pdf"
+            filename=download_filename
         )
         
     except HTTPException:
@@ -201,76 +227,3 @@ async def get_preview_image(processing_id: str):
     except Exception as e:
         logger.error(f"Error downloading preview: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to get preview: {str(e)}")
-
-
-@router.get("/files/{processing_id}")
-async def get_file_info(processing_id: str):
-    """
-    获取处理 ID 下的所有文件信息
-    
-    Args:
-        processing_id: 文件处理 ID
-        
-    Returns:
-        文件的下载端点和可用性信息
-    """
-    try:
-        pdf_path = f"{processing_id}/original.pdf"
-        preview_path = f"{processing_id}/first_page.png"
-        
-        pdf_exists = storage_service.file_exists(pdf_path)
-        preview_exists = storage_service.file_exists(preview_path)
-        
-        if not pdf_exists and not preview_exists:
-            raise HTTPException(status_code=404, detail="No files found for this processing ID")
-        
-        result = {
-            "processing_id": processing_id,
-            "files": {}
-        }
-        
-        if pdf_exists:
-            result["files"]["pdf"] = {
-                "download_url": f"/api/pdf/files/{processing_id}/pdf",
-                "available": True
-            }
-        
-        if preview_exists:
-            result["files"]["preview"] = {
-                "download_url": f"/api/pdf/files/{processing_id}/preview",
-                "available": True
-            }
-        
-        return result
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error getting file info: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to get file info: {str(e)}")
-
-
-@router.get("/cache/stats")
-async def get_cache_stats():
-    """
-    获取缓存统计信息
-    
-    Returns:
-        缓存使用情况统计
-    """
-    return cache_service.get_stats()
-
-
-@router.post("/cache/clear")
-async def clear_cache():
-    """
-    清空所有缓存
-    
-    Returns:
-        操作结果
-    """
-    try:
-        cache_service.clear()
-        return {"message": "Cache cleared successfully"}
-    except Exception as e:
-        logger.error(f"Error clearing cache: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Failed to clear cache: {str(e)}")
