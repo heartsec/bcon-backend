@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     model_config = ConfigDict(env_file=".env", case_sensitive=False)
     # Logging Configuration
+    log_level: str = model_config.get("LOG_LEVEL", "INFO")
     
 
 
