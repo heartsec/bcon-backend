@@ -24,6 +24,150 @@ class DifyService:
             if self.app_id:
                 logger.info(f"Using Dify App ID: {self.app_id}")
     
+    async def extract_variable(
+        self,
+        client: AsyncChatClient,
+        conversation_id: str,
+        variable_name: str,
+        user_id: str
+    ) -> Optional[Any]:
+        """
+        从 Dify conversation variables API 提取变量
+        
+        Args:
+            client: AsyncChatClient 实例
+            conversation_id: 对话 ID
+            variable_name: 要提取的变量名
+            user_id: 用户 ID
+            
+        Returns:
+            变量值,如果未找到则返回 None
+        """
+        if not conversation_id:
+            logger.warning(f"Cannot extract '{variable_name}': conversation_id is empty")
+            return None
+        
+        value = await self._get_variable_from_api(
+            client=client,
+            conversation_id=conversation_id,
+            variable_name=variable_name,
+            user_id=user_id
+        )
+        
+        if value is not None:
+            logger.info(f"Successfully extracted '{variable_name}' from conversation variables API")
+            return value
+        
+        logger.warning(f"Variable '{variable_name}' not found in conversation variables")
+        return None
+    
+    async def extract_multiple_variables(
+        self,
+        client: AsyncChatClient,
+        conversation_id: str,
+        variable_names: list[str],
+        user_id: str
+    ) -> Dict[str, Any]:
+        """
+        批量提取多个 Dify 对话变量
+        
+        Args:
+            client: AsyncChatClient 实例
+            conversation_id: 对话 ID
+            variable_names: 要提取的变量名列表
+            user_id: 用户 ID
+            
+        Returns:
+            包含所有成功提取变量的字典 {variable_name: value}
+        """
+        extracted = {}
+        
+        for var_name in variable_names:
+            value = await self.extract_variable(
+                client=client,
+                conversation_id=conversation_id,
+                variable_name=var_name,
+                user_id=user_id
+            )
+            if value is not None:
+                extracted[var_name] = value
+        
+        logger.info(f"Successfully extracted {len(extracted)}/{len(variable_names)} variables: {list(extracted.keys())}")
+        return extracted
+    
+    async def _get_variable_from_api(
+        self,
+        client: AsyncChatClient,
+        conversation_id: str,
+        variable_name: str,
+        user_id: str
+    ) -> Optional[Any]:
+        """
+        从 Dify conversation variables API 获取变量
+        
+        Args:
+            client: AsyncChatClient 实例
+            conversation_id: 对话 ID
+            variable_name: 变量名
+            user_id: 用户 ID
+            
+        Returns:
+            变量值,如果未找到或出错则返回 None
+        """
+        try:
+            logger.info(f"Fetching conversation variables for: {conversation_id}")
+            variables_response = await client.get_conversation_variables(
+                conversation_id=conversation_id,
+                user=user_id
+            )
+            variables_response.raise_for_status()
+            variables_data = variables_response.json()
+            
+            logger.debug(f"Conversation variables response: {variables_data}")
+            
+            # 从返回的变量列表中查找指定变量
+            # 返回格式: {"data": [{"name": "...", "value": "...", "value_type": "..."}], "has_more": false}
+            if 'data' in variables_data:
+                variables_list = variables_data['data']
+                if isinstance(variables_list, list):
+                    for var in variables_list:
+                        if var.get('name') == variable_name:
+                            value = self._parse_variable_value(var)
+                            logger.debug(f"Found '{variable_name}' with value_type: {var.get('value_type')}")
+                            return value
+            
+            logger.debug(f"Variable '{variable_name}' not found in conversation variables")
+            
+        except Exception as e:
+            logger.error(f"Failed to get conversation variables: {str(e)}", exc_info=True)
+        
+        return None
+    
+    @staticmethod
+    def _parse_variable_value(var: Dict[str, Any]) -> Any:
+        """
+        解析变量值,根据 value_type 进行相应处理
+        
+        Args:
+            var: 变量对象,包含 name, value, value_type 等字段
+            
+        Returns:
+            解析后的变量值
+        """
+        value = var.get('value')
+        value_type = var.get('value_type')
+        
+        # 如果是 JSON 类型且值为字符串,尝试解析
+        if value_type == 'json' and isinstance(value, str):
+            import json
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse JSON value: {value[:100]}...")
+                return value
+        
+        return value
+    
     async def process_document(
         self, 
         preview_url: str, 
@@ -92,72 +236,13 @@ class DifyService:
                 # 获取 conversation_id
                 conversation_id = result.get('conversation_id')
                 
-                # Extract confirmation_record from conversation variables
-                confirmation_record = None
-                
-                if conversation_id:
-                    # 使用 get_conversation_variables 获取对话变量
-                    try:
-                        logger.info(f"Fetching conversation variables for: {conversation_id}")
-                        variables_response = await client.get_conversation_variables(
-                            conversation_id=conversation_id,
-                            user=user_id
-                        )
-                        variables_response.raise_for_status()
-                        variables_data = variables_response.json()
-                        
-                        logger.debug(f"Conversation variables response: {variables_data}")
-                        
-                        # 从返回的变量列表中查找 confirmation_record
-                        # 返回格式: {"data": [{"name": "...", "value": "...", "value_type": "..."}], "has_more": false}
-                        if 'data' in variables_data:
-                            variables_list = variables_data['data']
-                            if isinstance(variables_list, list):
-                                for var in variables_list:
-                                    if var.get('name') == 'confirmation_record':
-                                        # 获取 value，如果是 JSON 字符串需要解析
-                                        value = var.get('value')
-                                        value_type = var.get('value_type')
-                                        
-                                        # 如果是 JSON 类型且是字符串，尝试解析
-                                        if value_type == 'json' and isinstance(value, str):
-                                            import json
-                                            try:
-                                                confirmation_record = json.loads(value)
-                                            except json.JSONDecodeError:
-                                                confirmation_record = value
-                                        else:
-                                            confirmation_record = value
-                                        
-                                        logger.info(f"Successfully extracted confirmation_record from variables list")
-                                        logger.debug(f"confirmation_record value_type: {value_type}")
-                                        break
-                        
-                        if not confirmation_record:
-                            logger.warning(f"confirmation_record not found in conversation variables")
-                    
-                    except Exception as e:
-                        logger.error(f"Failed to get conversation variables: {str(e)}", exc_info=True)
-                
-                # Fallback: 尝试从其他位置提取
-                if not confirmation_record:
-                    # Try to get from conversation_variables (for chat apps)
-                    if 'conversation_variables' in result:
-                        confirmation_record = result['conversation_variables'].get('confirmation_record')
-                        logger.debug(f"Found confirmation_record in conversation_variables")
-                    
-                    # Try to get from workflow outputs
-                    if not confirmation_record and 'outputs' in result:
-                        confirmation_record = result['outputs'].get('confirmation_record')
-                        logger.debug(f"Found confirmation_record in outputs")
-                    
-                    # Try to get from metadata
-                    if not confirmation_record and 'metadata' in result:
-                        confirmation_record = result['metadata'].get('confirmation_record')
-                        logger.debug(f"Found confirmation_record in metadata")
-                
-                if not confirmation_record:
-                    logger.warning("confirmation_record not found in any location")
+                # 从 conversation variables API 提取变量
+                confirmation_record = await self.extract_variable(
+                    client=client,
+                    conversation_id=conversation_id,
+                    variable_name='confirmation_record',
+                    user_id=user_id
+                )
                 
                 return {
                     "success": True,
